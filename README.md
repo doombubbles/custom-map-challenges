@@ -1,5 +1,5 @@
 <h1 align="center">
-<a href="https://github.com/doombubbles/custom-map-challenges/releases/latest/download/CustomMapChallenges.dll">
+<a href="https://nightly.link/doombubbles/custom-map-challenges/workflows/build/main/CustomMapChallenges.dll.zip">
     <img align="left" alt="Icon" height="90" src="Icon.png">
     <img align="right" alt="Download" height="75" src="https://raw.githubusercontent.com/gurrenm3/BTD-Mod-Helper/master/BloonsTD6%20Mod%20Helper/Resources/DownloadBtn.png">
 </a>
