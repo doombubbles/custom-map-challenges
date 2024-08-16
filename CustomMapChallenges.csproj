@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <RootNamespace>CustomMapChallenges</RootNamespace>
+        <Configurations>Debug;Release</Configurations>
+        <Nullable>enable</Nullable>
+        <AssemblyName>CustomMapChallenges</AssemblyName>
+        <LangVersion>preview</LangVersion>
+        <Optimize>False</Optimize>
+        <DebugType>embedded</DebugType>
+        <!--<BloonsTD6Version>v39</BloonsTD6Version>-->
+        <BloonsTD6>C:\Program Files (x86)\Steam\steamapps\common\BloonsTD6$(BloonsTD6Version)</BloonsTD6>
+    </PropertyGroup>
+    <ItemGroup>
+        <Content Include=".github\workflows\build.yml" />
+    </ItemGroup>
+
+    <Import Project="..\btd6.targets" />
+</Project>
