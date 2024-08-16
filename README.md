@@ -6,7 +6,7 @@
 Custom Map Challenges
 </h1>
 
-### Allows you to use Custom Maps in the Challenge/Odyssey Editor and Boss Challenges
+### Use Custom Maps in the Challenge Editor and Boss Challenges
 
 Unlike the normal content browser, you can choose which difficulty you want to use the map as.
 Map Difficulty primarily affects Hero Level up speed.
