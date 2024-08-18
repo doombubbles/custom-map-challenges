@@ -247,7 +247,10 @@ internal static class ContentBrowser_Open
     [HarmonyPrefix]
     internal static void Postfix(ContentBrowser __instance)
     {
-        CustomMapChallengesMod.CreateContentBrowserUI(__instance);
+        if (__instance.enabled)
+        {
+            CustomMapChallengesMod.CreateContentBrowserUI(__instance);
+        }
     }
 }
 
