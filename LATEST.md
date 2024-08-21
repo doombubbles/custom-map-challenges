@@ -1,1 +1,1 @@
-- Initial Release
+- Fixed Boss Challenge save UI

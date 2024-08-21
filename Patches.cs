@@ -9,6 +9,7 @@ using BTD_Mod_Helper.Extensions;
 using HarmonyLib;
 using Il2CppAssets.Scripts.Models.Profile;
 using Il2CppAssets.Scripts.Models.ServerEvents;
+using Il2CppAssets.Scripts.Unity;
 using Il2CppAssets.Scripts.Unity.Player;
 using Il2CppAssets.Scripts.Unity.UI_New;
 using Il2CppAssets.Scripts.Unity.UI_New.ChallengeEditor;
@@ -16,14 +17,10 @@ using Il2CppAssets.Scripts.Unity.UI_New.DailyChallenge;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame.EditorMenus;
 using Il2CppAssets.Scripts.Unity.UI_New.Odyssey;
-using Il2CppAssets.Scripts.Unity.UI_New.Popups;
 using Il2CppNinjaKiwi.GUTS.Models.ContentBrowser;
-using Il2CppSystem.Collections.Generic;
 using Il2CppSystem.Threading.Tasks;
-using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.U2D;
-using Object = Il2CppSystem.Object;
 using TaskScheduler = BTD_Mod_Helper.Api.TaskScheduler;
 
 namespace CustomMapChallenges;
@@ -108,7 +105,47 @@ internal static class UI_LoadGame
         data.dcModel = data.dcModel?.Clone() ?? DailyChallengeModel.CreateDefaultEditorModel();
         data.dcModel.eventID = map;
         data.dcModel.customMapModel = customMap.Model;
-        data.dcModel.chalType = ChallengeType.CustomMapPlay;
+        if (Game.Version.Major < 41)
+        {
+            data.dcModel.chalType = ChallengeType.CustomMapPlay;
+        }
+    }
+}
+
+/// <summary>
+/// Fix the challenge id in saves to be the custom map id
+/// </summary>
+[HarmonyPatch(typeof(InGame), nameof(InGame.ChallengeId), MethodType.Getter)]
+internal static class InGame_ChallengeId
+{
+    [HarmonyPostfix]
+    internal static void Postfix(InGame __instance, ref string __result)
+    {
+        if (string.IsNullOrEmpty(__result) && InGameData.CurrentGame?.dcModel?.customMapModel != null)
+        {
+            __result = InGameData.CurrentGame.dcModel.eventID;
+        }
+    }
+}
+
+[HarmonyPatch]
+internal static class BossEventScreen_GetChallengeSave
+{
+    private static readonly MethodBase? Method = AccessTools.Method(typeof(BossEventScreen), "GetChallengeSave");
+
+    [HarmonyPrepare]
+    internal static bool Prepare() => Method != null;
+
+    [HarmonyTargetMethod]
+    internal static MethodBase TargetMethod() => Method!;
+
+    [HarmonyPostfix]
+    internal static void Postfix(BossEventScreen __instance)
+    {
+        if (CustomMapChallengesMod.CustomMaps.ContainsKey(__instance.selectedChallengeSave?.dailyChallengeEventID ?? ""))
+        {
+            __instance.selectedChallengeSave!.mapName = __instance.selectedChallengeSave.dailyChallengeEventID;
+        }
     }
 }
 
@@ -274,7 +311,7 @@ internal static class ContentBrowserPanel_ResetDeleteButtonState
     internal static void Postfix(MapPanel __instance)
     {
         if (!CustomMapChallengesMod.ShowingCustom) return;
-        
+
         var id = ModContent.GetId<CustomMapChallengesMod>(__instance.playerContent.Id);
         if (CustomMapChallengesMod.CustomMaps.ContainsKey(id))
         {
