@@ -1,8 +1,10 @@
 ﻿using BTD_Mod_Helper.Api;
+using Il2Cpp;
 using Il2CppAssets.Scripts.Data.MapSets;
 using Il2CppAssets.Scripts.Models.Map;
 using Il2CppAssets.Scripts.Models.ServerEvents;
 using Il2CppNewtonsoft.Json;
+using UnityEngine;
 using static System.Reflection.BindingFlags;
 
 namespace CustomMapChallenges;
@@ -18,5 +20,11 @@ public static class VersionCompat
     }
 
     public static bool IsWater(this MapEditorAreaData area) =>
-        JsonConvert.SerializeObject(area).Contains($"\"areaType\":{(int)AreaType.water}");
+        JsonConvert.SerializeObject(area).Contains($"\"areaType\":{(int) AreaType.water}");
+
+    public static void ShowIfCustom(GameObject mapImage, bool on)
+    {
+        var map = mapImage.GetComponent<MapSelectDisplay>().displayedMap;
+        mapImage.SetActive(!on || CustomMapChallengesMod.CustomMaps.ContainsKey(map));
+    }
 }

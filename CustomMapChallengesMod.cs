@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using BTD_Mod_Helper;
 using BTD_Mod_Helper.Api;
 using BTD_Mod_Helper.Api.Components;
@@ -15,6 +17,7 @@ using Il2CppAssets.Scripts;
 using Il2CppAssets.Scripts.Data;
 using Il2CppAssets.Scripts.Data.MapSets;
 using Il2CppAssets.Scripts.Models;
+using Il2CppAssets.Scripts.Models.Difficulty;
 using Il2CppAssets.Scripts.Models.Profile;
 using Il2CppAssets.Scripts.Models.ServerEvents;
 using Il2CppAssets.Scripts.Unity;
@@ -31,7 +34,10 @@ using UnityEngine;
 using UnityEngine.UI;
 using static System.IO.SearchOption;
 using Path = System.IO.Path;
+using TaskScheduler = BTD_Mod_Helper.Api.TaskScheduler;
 using Version = Il2CppSystem.Version;
+
+#pragma warning disable CS4014
 
 [assembly:
     MelonInfo(typeof(CustomMapChallengesMod), ModHelperData.Name, ModHelperData.Version, ModHelperData.RepoOwner)]
@@ -48,6 +54,13 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         CustomMapModel Model,
         MapDifficulty Difficulty);
 
+    public static readonly ModSettingEnum<SpecialConditionType> ShowCounterInBrowserMaps = new(SpecialConditionType.None)
+    {
+        description = "Manually enables either the Cash or Tier counter for when playing browser maps. (Changes take effect when loading into a match)",
+        labelFunction = type => type.ToString().Spaced().Replace(":", ""),
+        icon = VanillaSprites.LeastCashIcon
+    };
+    
     public static readonly ModSettingFolder MapsFolder =
         new(Path.Combine(Application.persistentDataPath, nameof(CustomMapChallenges)))
         {
@@ -172,7 +185,6 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         if (!Enum.TryParse(new FileInfo(path).Directory?.Name, out MapDifficulty mapDifficulty))
             mapDifficulty = MapDifficulty.Intermediate;
         var customMapModel = mapEditorModel.customMapModel;
-
         CustomMaps[id] = new CustomMapRecord(name, id, path, mapEditorModel.customMapModel, mapDifficulty);
 
         LocalizationManager.Instance.textTable[id] = mapEditorModel.name;
@@ -188,16 +200,43 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         };
         mapDetails.SetMapSprite($"{SpriteAtlas}[{id}]");
 
-        // Bug with calling il2cpp async methods that have results, so we're doing this I guess
-        try
+        if (!HasThumbnail(id, out _))
         {
-            MapEditorThumbnails.InvalidateMapThumbnail(id);
-            // ReSharper disable once Unity.IncorrectMonoBehaviourInstantiation
-            new MapEditorScreen().LoadMapThumbnailAsync(id, customMapModel);
-        }
-        catch (Exception e)
-        {
-            ModHelper.Warning<CustomMapChallengesMod>(e);
+            DownloadThumbnail(name).ContinueWith(task =>
+            {
+                if (task is {IsCompletedSuccessfully: true, Result: true})
+                {
+                    ModHelper.Msg<CustomMapChallengesMod>($"Fetched thumbnail for {id}");
+                    return;
+                }
+
+                TaskScheduler.ScheduleTask(() =>
+                {
+                    // Bug with calling il2cpp async methods that have results, so we're doing this I guess
+                    try
+                    {
+                        MapEditorThumbnails.InvalidateMapThumbnail(id);
+
+                        // ReSharper disable once Unity.IncorrectMonoBehaviourInstantiation
+                        new MapEditorScreen().LoadMapThumbnailAsync(id, customMapModel).ContinueWith(
+                            new Action<Il2CppSystem.Threading.Tasks.Task>(t =>
+                            {
+                                if (t.IsCompletedSuccessfully)
+                                {
+                                    ModHelper.Msg<CustomMapChallengesMod>($"Generated thumbnail for {id}");
+                                }
+                                else
+                                {
+                                    ModHelper.Warning<CustomMapChallengesMod>($"Failed to get thumbnail for {id}");
+                                }
+                            }));
+                    }
+                    catch (Exception e)
+                    {
+                        ModHelper.Warning<CustomMapChallengesMod>(e);
+                    }
+                });
+            });
         }
 
         AddMapToGame(mapDetails);
@@ -241,6 +280,40 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         ModHelper.Msg<CustomMapChallengesMod>($"Deleted map {id}");
     }
 
+    public static bool HasThumbnail(string map, out string key)
+    {
+        key = map + "_large";
+        if (!File.Exists(MapEditorThumbnails.storageManager.GetFilePath(key)))
+        {
+            key = map.Replace(ModContent.GetInstance<CustomMapChallengesMod>().IDPrefix, "") + "_large";
+        }
+
+        Directory.CreateDirectory(MapEditorThumbnails.storageManager.GetFilePath(""));
+
+        return File.Exists(MapEditorThumbnails.storageManager.GetFilePath(key));
+    }
+
+    public static async Task<bool> DownloadThumbnail(string map)
+    {
+        using var client = new HttpClient();
+
+        var response = await client.GetAsync($"https://data.ninjakiwi.com/btd6/maps/map/{map}/preview");
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+
+        if (bytes.Length < 1024)
+        {
+            return false;
+        }
+
+        var encodedBytes = MapEditorThumbnails.Shuffle(bytes);
+        var path = MapEditorThumbnails.storageManager.GetFilePath(map + "_large");
+
+        await File.WriteAllBytesAsync(path, encodedBytes);
+
+        return true;
+    }
+
     public static void CreateChallengeUI(GameMenu screen, string id, string? baseId = null)
     {
         var difficulties = Enum.GetValues<MapDifficulty>().ToList();
@@ -275,12 +348,17 @@ public class CustomMapChallengesMod : BloonsTD6Mod
                 }
             })
         );
-        panel.AddText(new Info("Text", 350, 150)
+        var text = panel.AddText(new Info("Text", 350, 150)
         {
             Y = -25,
             Anchor = new Vector2(0.5f, 0),
             Pivot = new Vector2(0.5f, 0)
         }, screen.Is<MapEditorScreen>() ? "Challenge Editor" : "Map Difficulty", 60f);
+        if (screen.Is<ChallengeEditorPlay>() && Game.Version.Major >= 44 && Game.Version.Minor >= 1)
+        {
+            button.RectTransform.localPosition = new Vector3(0, 450, 0);
+            text.RectTransform.localPosition = new Vector3(0, 775, 0);
+        }
 
         var dropdown = panel.AddDropdown(new Info("Dropdown", 450, 100)
             {
@@ -365,17 +443,26 @@ public class CustomMapChallengesMod : BloonsTD6Mod
             Position = new Vector2(50, 25)
         });
 
-        panel.AddCheckbox(new Info("Checkbox", 0, 50, 250, 250), false, VanillaSprites.MapEditorBtn, new Action<bool>(
-            (on) =>
-            {
-                foreach (var image in mapSelectPanel.transform.GetComponentsInChildren<Image>(true)
-                             .Where(image => image.name == "MapImage"))
+        var checkbox = panel.AddCheckbox(new Info("Checkbox", 0, 50, 250, 250), false, VanillaSprites.MapEditorBtn,
+            new Action<bool>(
+                (on) =>
                 {
-                    image.transform.parent.gameObject.SetActive(!on || string.IsNullOrEmpty(image.sprite.name));
-                }
-            }));
+                    foreach (var image in mapSelectPanel.transform.GetComponentsInChildren<Image>(true)
+                                 .Where(image => image.name == "MapImage"))
+                    {
+                        var mapImage = image.transform.parent.gameObject;
+                        try
+                        {
+                            VersionCompat.ShowIfCustom(mapImage, on);
+                        }
+                        catch (Exception)
+                        {
+                            mapImage.SetActive(!on || string.IsNullOrEmpty(image.sprite.name));
+                        }
+                    }
+                }));
 
-        panel.AddText(new Info("Text", 0, -90, 400, 150), "Custom Only", 55f);
+        checkbox.AddText(new Info("Text", 0, -140, 400, 150), "Custom Only", 55f);
     }
 
     public static bool ShowingCustom;
@@ -384,14 +471,16 @@ public class CustomMapChallengesMod : BloonsTD6Mod
     {
         if (contentBrowser.transform.GetComponentFromChildrenByName<ModHelperPanel>("CustomFilterPanel")) return;
 
-        var panel = contentBrowser.transform.Find("Container").gameObject.AddModHelperPanel(new Info("CustomFilterPanel", 250, 250)
-        {
-            Anchor = new Vector2(1, 0),
-            Pivot = new Vector2(0, 0),
-            Position = new Vector2(85, 50)
-        });
+        var panel = contentBrowser.transform.Find("Container").gameObject.AddModHelperPanel(
+            new Info("CustomFilterPanel", 250, 250)
+            {
+                Anchor = new Vector2(1, 0),
+                Pivot = new Vector2(0, 0),
+                Position = new Vector2(85, 50)
+            });
 
-        panel.AddButton(new Info("FilterCustomButton", 0, 50, 250, 250), VanillaSprites.EditChallengeIcon, new Action(() =>
+        panel.AddButton(new Info("FilterCustomButton", 0, 50, 250, 250), VanillaSprites.EditChallengeIcon, new Action(
+            () =>
             {
                 var tabSettings = ContentBrowser.BrowserSettings.tabSettings[contentBrowser.SelectedTab].custom;
 

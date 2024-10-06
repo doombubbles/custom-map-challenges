@@ -8,7 +8,7 @@
         <LangVersion>preview</LangVersion>
         <Optimize>False</Optimize>
         <DebugType>embedded</DebugType>
-        <!--<BloonsTD6Version>v39</BloonsTD6Version>-->
+        <!--<BloonsTD6Version>v42</BloonsTD6Version>-->
         <BloonsTD6>C:\Program Files (x86)\Steam\steamapps\common\BloonsTD6$(BloonsTD6Version)</BloonsTD6>
     </PropertyGroup>
     <ItemGroup>

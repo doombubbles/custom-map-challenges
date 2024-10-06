@@ -1,1 +1,4 @@
-- Fixed Boss Challenge save UI
+- Updated some UI to not overlap with updated Mod Helper UI
+- Improved map thumbnail loading
+- Added a "Show Counter In Browser Maps" mod setting that lets you enable the Least Cash / Least Tiers counters for browser maps
+- Fixed Victory/Defeat screens for older BTD6 versions

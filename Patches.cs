@@ -7,6 +7,7 @@ using BTD_Mod_Helper.Api;
 using BTD_Mod_Helper.Api.Components;
 using BTD_Mod_Helper.Extensions;
 using HarmonyLib;
+using Il2CppAssets.Scripts.Models.Difficulty;
 using Il2CppAssets.Scripts.Models.Profile;
 using Il2CppAssets.Scripts.Models.ServerEvents;
 using Il2CppAssets.Scripts.Unity;
@@ -14,6 +15,7 @@ using Il2CppAssets.Scripts.Unity.Player;
 using Il2CppAssets.Scripts.Unity.UI_New;
 using Il2CppAssets.Scripts.Unity.UI_New.ChallengeEditor;
 using Il2CppAssets.Scripts.Unity.UI_New.DailyChallenge;
+using Il2CppAssets.Scripts.Unity.UI_New.GameOver;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame.EditorMenus;
 using Il2CppAssets.Scripts.Unity.UI_New.Odyssey;
@@ -38,20 +40,30 @@ internal static class SpriteAtlas_GetSprite
             !CustomMapChallengesMod.CustomMaps.ContainsKey(name)) return true;
         try
         {
-            var thumbnailBytes = MapEditorThumbnails.storageManager.GetBytes(name + "_large");
-            var texture = MapEditorThumbnails.DecodeImage(thumbnailBytes);
-            texture.mipMapBias = -1;
+            if (CustomMapChallengesMod.HasThumbnail(name, out var key))
+            {
+                var thumbnailBytes = MapEditorThumbnails.storageManager.GetBytes(key);
+                var texture = MapEditorThumbnails.DecodeImage(thumbnailBytes);
+                texture.mipMapBias = -1;
 
-            __result = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                __result = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f));
 
-            return false;
+                return false;
+            }
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            ModHelper.Warning<CustomMapChallengesMod>($"Unable to get thumbnail for {name}");
-            name = "MapSelectBlonsMapButton";
-            return true;
+#if DEBUG
+            ModHelper.Warning<CustomMapChallengesMod>(e);
+#endif
         }
+
+        ModHelper.Warning<CustomMapChallengesMod>(
+            $"Unable to get thumbnail for {name}, they may still be fetching in the background");
+
+        name = "MapSelectBlonsMapButton";
+        return true;
     }
 }
 
@@ -99,15 +111,32 @@ internal static class UI_LoadGame
         var data = InGameData.Editable;
         var map = mapSaveData?.dailyChallengeEventID ?? data.selectedMap;
 
-        if (!CustomMapChallengesMod.CustomMaps.TryGetValue(map, out var customMap)) return;
-
-        data.selectedMap = "BaseEditorMap";
-        data.dcModel = data.dcModel?.Clone() ?? DailyChallengeModel.CreateDefaultEditorModel();
-        data.dcModel.eventID = map;
-        data.dcModel.customMapModel = customMap.Model;
-        if (Game.Version.Major < 41)
+        if (CustomMapChallengesMod.CustomMaps.TryGetValue(map, out var customMap))
         {
-            data.dcModel.chalType = ChallengeType.CustomMapPlay;
+            data.selectedMap = "BaseEditorMap";
+            data.dcModel = data.dcModel?.Clone() ?? DailyChallengeModel.CreateDefaultEditorModel();
+            data.dcModel.eventID = map;
+            data.dcModel.customMapModel = customMap.Model;
+            if (Game.Version.Major <= 41)
+            {
+                data.dcModel.chalType = ChallengeType.CustomMapPlay;
+            }
+        }
+
+        if (data.dcModel is {customMapModel: not null, leastTiersUsed: <= 0, leastCashUsed: <= 0})
+        {
+            switch ((SpecialConditionType) CustomMapChallengesMod.ShowCounterInBrowserMaps)
+            {
+                case SpecialConditionType.LeastCash:
+                    data.dcModel.leastCashUsed = 99999999;
+                    break;
+                case SpecialConditionType.LeastTiers:
+                    data.dcModel.leastTiersUsed = 99999999;
+                    break;
+                case SpecialConditionType.None:
+                default:
+                    break;
+            }
         }
     }
 }
@@ -142,7 +171,8 @@ internal static class BossEventScreen_GetChallengeSave
     [HarmonyPostfix]
     internal static void Postfix(BossEventScreen __instance)
     {
-        if (CustomMapChallengesMod.CustomMaps.ContainsKey(__instance.selectedChallengeSave?.dailyChallengeEventID ?? ""))
+        if (CustomMapChallengesMod.CustomMaps.ContainsKey(__instance.selectedChallengeSave?.dailyChallengeEventID ??
+                                                          ""))
         {
             __instance.selectedChallengeSave!.mapName = __instance.selectedChallengeSave.dailyChallengeEventID;
         }
@@ -199,8 +229,11 @@ internal static class ChallengeEditorPlay_Open
         {
             var id = __instance.dcm.map;
             CustomMapChallengesMod.CreateChallengeUI(__instance, id);
-            var shareBtn = (Component) __instance.GetType().GetProperty("shareBtn")!.GetValue(__instance)!;
-            shareBtn.transform.parent.gameObject.SetActive(false);
+            var shareBtn = (Component?) __instance.GetType().GetProperty("shareBtn")?.GetValue(__instance);
+            if (shareBtn != null)
+            {
+                shareBtn.transform.parent.gameObject.SetActive(false);
+            }
         }
     }
 }
@@ -214,7 +247,7 @@ internal static class OdysseyEditor_PopulateMaps
     [HarmonyPostfix]
     internal static void Postfix(OdysseyEditor __instance)
     {
-        var shareBtn = (Component) __instance.GetType().GetProperty("shareBtn")!.GetValue(__instance)!;
+        var shareBtn = (Component?) __instance.GetType().GetProperty("shareBtn")?.GetValue(__instance);
         if (shareBtn != null && shareBtn.gameObject != null)
         {
             __instance.shareBtn.gameObject.SetActive(
@@ -357,6 +390,24 @@ internal static class ContentBrowser_ReOpen
         if (CustomMapChallengesMod.ShowingCustom)
         {
             __instance.transform.GetComponentFromChildrenByName<ModHelperButton>("FilterCustomButton").Button.Press();
+        }
+    }
+}
+
+/// <summary>
+/// Fix Defeat and Victory Screens for old versions
+/// </summary>
+[HarmonyPatch(typeof(InGame), nameof(InGame.IsUserPlayMode))]
+internal static class InGame_IsUserPlayMode
+{
+    [HarmonyPostfix]
+    internal static void Postfix(InGame __instance, ref bool __result)
+    {
+        if (Game.Version.Major <= 41 &&
+            (__instance.matchWon || __instance.matchLost) &&
+            CustomMapChallengesMod.CustomMaps.ContainsKey(InGameData.CurrentGame.dcModel?.eventID ?? ""))
+        {
+            __result = false;
         }
     }
 }
