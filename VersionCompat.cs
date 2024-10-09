@@ -1,6 +1,7 @@
 ﻿using BTD_Mod_Helper.Api;
 using Il2Cpp;
 using Il2CppAssets.Scripts.Data.MapSets;
+using Il2CppAssets.Scripts.Models.ContentBrowser;
 using Il2CppAssets.Scripts.Models.Map;
 using Il2CppAssets.Scripts.Models.ServerEvents;
 using Il2CppNewtonsoft.Json;

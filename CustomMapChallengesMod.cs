@@ -17,6 +17,7 @@ using Il2CppAssets.Scripts;
 using Il2CppAssets.Scripts.Data;
 using Il2CppAssets.Scripts.Data.MapSets;
 using Il2CppAssets.Scripts.Models;
+using Il2CppAssets.Scripts.Models.ContentBrowser;
 using Il2CppAssets.Scripts.Models.Difficulty;
 using Il2CppAssets.Scripts.Models.Profile;
 using Il2CppAssets.Scripts.Models.ServerEvents;
@@ -54,13 +55,15 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         CustomMapModel Model,
         MapDifficulty Difficulty);
 
-    public static readonly ModSettingEnum<SpecialConditionType> ShowCounterInBrowserMaps = new(SpecialConditionType.None)
-    {
-        description = "Manually enables either the Cash or Tier counter for when playing browser maps. (Changes take effect when loading into a match)",
-        labelFunction = type => type.ToString().Spaced().Replace(":", ""),
-        icon = VanillaSprites.LeastCashIcon
-    };
-    
+    public static readonly ModSettingEnum<SpecialConditionType> ShowCounterInBrowserMaps =
+        new(SpecialConditionType.None)
+        {
+            description =
+                "Manually enables either the Cash or Tier counter for when playing browser maps. (Changes take effect when loading into a match)",
+            labelFunction = type => type.ToString().Spaced().Replace(":", ""),
+            icon = VanillaSprites.LeastCashIcon
+        };
+
     public static readonly ModSettingFolder MapsFolder =
         new(Path.Combine(Application.persistentDataPath, nameof(CustomMapChallenges)))
         {
@@ -179,7 +182,9 @@ public class CustomMapChallengesMod : BloonsTD6Mod
         var id = ModContent.GetId<CustomMapChallengesMod>(name);
         var storage = PlayerContentManager.mapDataStorage;
 
-        var text = Path.HasExtension(path) ? File.ReadAllText(path) : storage.decode.Invoke(storage.ReadAllBytes(path));
+        var text = Path.HasExtension(path)
+            ? File.ReadAllText(path)
+            : storage.decode.Invoke(StorageManager.ReadAllBytes(path));
         var mapEditorModel = storage.serialiser.Deserialize<MapEditorModel>(text);
 
         if (!Enum.TryParse(new FileInfo(path).Directory?.Name, out MapDifficulty mapDifficulty))
@@ -354,7 +359,7 @@ public class CustomMapChallengesMod : BloonsTD6Mod
             Anchor = new Vector2(0.5f, 0),
             Pivot = new Vector2(0.5f, 0)
         }, screen.Is<MapEditorScreen>() ? "Challenge Editor" : "Map Difficulty", 60f);
-        if (screen.Is<ChallengeEditorPlay>() && Game.Version.Major >= 44 && Game.Version.Minor >= 1)
+        if (screen.Is<ChallengeEditorPlay>() && Game.Version.Major >= 44)
         {
             button.RectTransform.localPosition = new Vector3(0, 450, 0);
             text.RectTransform.localPosition = new Vector3(0, 775, 0);
