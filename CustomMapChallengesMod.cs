@@ -184,7 +184,7 @@ public class CustomMapChallengesMod : BloonsTD6Mod
 
         var text = Path.HasExtension(path)
             ? File.ReadAllText(path)
-            : storage.decode.Invoke(StorageManager.ReadAllBytes(path));
+            : storage.decode.Invoke(Il2CppSystem.IO.File.ReadAllBytes(path));
         var mapEditorModel = storage.serialiser.Deserialize<MapEditorModel>(text);
 
         if (!Enum.TryParse(new FileInfo(path).Directory?.Name, out MapDifficulty mapDifficulty))
