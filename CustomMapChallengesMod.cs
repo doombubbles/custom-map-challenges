@@ -30,6 +30,7 @@ using Il2CppAssets.Scripts.Unity.UI_New.InGame;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame.EditorMenus;
 using Il2CppAssets.Scripts.Unity.UI_New.Popups;
 using Il2CppNinjaKiwi.Common;
+using Il2CppNinjaKiwi.Localization;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
